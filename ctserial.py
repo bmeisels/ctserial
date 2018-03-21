@@ -1,23 +1,17 @@
-#!/usr/bin/env python
-
+#!/usr/bin/env python3
 """
-jpnevulator.py
+Control Things Serial, aka ctserial.py
 
-A Python version of jpnevulator.
-
-If you don't need jpnevulator CLI compatiblitity,
-you could also use https://git.jim.sh/jim/terminal.git .
-
-Usage of the original jpnevulator:
-
-jpnevulator [--version] [--help] [--checksum] [--crc16=poly]
-  [--crc8=poly] [--fuck-up] [--file=file] [--no-send]
-  [--delay-line=microseconds] [--delay-byte=microseconds]
-  [--print] [--size=size] [--tty=tty] [--pty [=alias]] [--width] [--pass]
-  [--read] [--write] [--timing-print] [--timing-delta=microseconds]
-  [--ascii] [--alias-separator=separator] [--byte-count]
-  [--control] [--control-poll=microseconds] [--count=bytes] <file>
-
+# Copyright (C) 2018  Justin Searle
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details at <http://www.gnu.org/licenses/>.
 """
 
 import argparse
@@ -41,12 +35,12 @@ class MultiArg(argparse.Action):
     inspired by http://stackoverflow.com/a/12461237/183995
     """
     def __call__(self, parser, namespace, values, option_strings=None):
-        dest = getattr(namespace, self.dest, None) 
+        dest = getattr(namespace, self.dest, None)
         #print(self.dest, dest, self.default, values, option_strings)
         if(not hasattr(dest,'append') or dest == self.default):
             dest = []
             setattr(namespace, self.dest, dest)
-            parser.set_defaults(**{self.dest:None}) 
+            parser.set_defaults(**{self.dest:None})
         dest.append(values)
 
 def port_def(string):
@@ -93,11 +87,7 @@ def main():
 
     if args.version:
         print(textwrap.dedent("""
-        jpnevulator.py version 2.1.3
-        Copyright (C) 2015 Philipp Klaus <philipp.l.klaus@web.de>
-        This is free software.  You may redistribute copies of it under the terms of
-        the GNU General Public License <http://www.gnu.org/licenses/gpl.html>.
-        There is NO WARRANTY, to the extent permitted by law.
+        ctserial.py version 0.1
         """))
         sys.exit(0)
 

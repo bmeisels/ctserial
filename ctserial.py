@@ -14,120 +14,179 @@ Control Things Serial, aka ctserial.py
 # details at <http://www.gnu.org/licenses/>.
 """
 
-import argparse
+import click
 import sys
-import time
-import textwrap
-from datetime import datetime as dt
-
 import serial
-
+import re
+import time
+from prompt_toolkit.application import Application
+from prompt_toolkit.document import Document
+from prompt_toolkit.filters import has_focus
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.styles import Style
+from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.contrib.completers import WordCompleter
 try:
-    clock = time.perf_counter
-except AttributeError:
-    clock = time.time
+    import better_exceptions
+except ImportError as err:
+    pass
 
-class MultiArg(argparse.Action):
-    """
-    An action adding the supplied values of multiple
-    statements of the same optional argument to a list.
 
-    inspired by http://stackoverflow.com/a/12461237/183995
-    """
-    def __call__(self, parser, namespace, values, option_strings=None):
-        dest = getattr(namespace, self.dest, None)
-        #print(self.dest, dest, self.default, values, option_strings)
-        if(not hasattr(dest,'append') or dest == self.default):
-            dest = []
-            setattr(namespace, self.dest, dest)
-            parser.set_defaults(**{self.dest:None})
-        dest.append(values)
+help_text = """Connected to serial device {}
 
-def port_def(string):
-    if ':' in string:
-        port, _, alias = string.partition(':')
+Available commands:
+    hex HEX         send hex data (example: "hex 56ffff00080a0007")
+    ascii ASCII     send ASCII data
+    exit            exit application
+
+Press Control-C to exit.
+"""
+def as_hex_chars(charcode):
+    return str.format('{:02x}', charcode)
+
+def as_normal_chars(charcode):
+    if (64 < charcode < 123) or (58 > charcode > 47):
+        return chr(charcode)
+    return '_'
+
+def as_mixed_chars(charcode):
+    if (64 < charcode < 123) or (58 > charcode > 47):
+        return '\033[92m {0}\033[0m'.format(chr(charcode))
+    if charcode == 32:
+        return ' _'
+    if charcode == ord('.'):
+        return ' .'
+    if charcode == 255:
+        return '\033[2m{0}\033[0m'.format(as_hex_chars(charcode))
+    return as_hex_chars(charcode)
+
+
+def format_output(raw_bytes):
+    """ Return hex and ascii decodes aligned on two lines """
+    hex_out = ''.join(map(as_hex_chars, raw_bytes))
+    ascii_out = ' '.join(map(as_normal_chars, raw_bytes))
+    return (hex_out, ascii_out)
+
+
+def send_instruction(ser, tx_raw):
+    """Send data to serial device"""
+    # clear out any leftover data
+    if ser.inWaiting() > 0:
+        ser.flushInput()
+    ser.write(tx_raw)
+    time.sleep(0.1)
+    rx_raw = []
+    while ser.inWaiting() > 0:
+        rx_raw.append(ord(ser.read()))
+    time.sleep(0.1)
+    rx_hex = ''.join(map(as_hex_chars, rx_raw))
+    rx_str = ' '.join(map(as_normal_chars, rx_raw))
+    return '          <-- {}\n               {}'.format(rx_hex, rx_str)
+    # return rx_raw
+
+
+def parse_command(input_text, event):
+    parts = input_text.split()
+    command = parts[0]
+    data = parts[1:]
+    if command.lower() == 'hex':
+        raw_str = ''.join(data)
+        return bytes.fromhex(raw_str)
+    elif command.lower() == 'ascii':
+        return b''.join(data)
+    elif command.lower() == 'exit':
+        event.app.set_result(None)
     else:
-        port, alias = string, None
-    if '@' in port:
-        port, _, baudrate = port.partition('@')
+        ''
+
+
+def application(ser):
+    # The layout.
+    output_field = TextArea(
+        style='class:output-field',
+        text=help_text.format(ser.port))
+    completer = WordCompleter(['hex', 'bin', 'ascii'])
+    input_field = TextArea(
+        height=1,
+        prompt='>>> ',
+        style='class:input-field',
+        completer=completer)
+
+    container = HSplit([
+        input_field,
+        Window(height=1, char='-', style='class:line'),
+        output_field])
+
+    # The key bindings.
+    kb = KeyBindings()
+
+    @kb.add('enter', filter=has_focus(input_field))
+    def _(event):
+        tx_raw = parse_command(input_field.text, event)
         try:
-            baudrate = int(baudrate)
-        except ValueError:
-            raise argparse.ArgumentTypeError('the specified baudrate is not an integer')
-    else:
-        baudrate = None
-    return {'port': port, 'alias': alias, 'baudrate': baudrate}
+            rx_raw = str(send_instruction(ser, tx_raw))
+        except BaseException as e:
+            rx_raw = '\n\n{}'.format(e)
 
-def hex_format(chunk):
-    try:
-        return ' '.join('{:02X}'.format(byte) for byte in chunk)
-    except ValueError:
-        return ' '.join('{:02X}'.format(ord(byte)) for byte in chunk)
+        output = output_field.text
+        # output += 'tx_raw = ' + str(tx_raw) + '    type= ' + str(type(tx_raw))
+        # output += 'rx_raw = ' + str(format_output(rx_raw))
+        output += '{} -->\n'.format(tx_raw)
+        output += rx_raw
+        # output += '          <-- {[0]}\n               {[1]}'.format(format_output(rx_raw))
 
-def ascii_format(chunk):
-    printable = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
-    try:
-        chars = [chr(i) for i in chunk]
-        return ''.join([char if char in printable else '.' for char in chars])
-    except TypeError:
-        chars = chunk
-        return ''.join([char if char in printable else '.' for char in chars])
+        output_field.buffer.document = Document(
+            text=output, cursor_position=len(output))
+        input_field.text = ''
 
+    @kb.add('c-c')
+    @kb.add('c-q')
+    def _(event):
+        " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
+        ser.close()
+        event.app.set_result(None)
+
+    style = Style([
+        ('output-field', 'bg:#000000 #ffffff'),
+        ('input-field', 'bg:#000000 #ffffff'),
+        ('line',        '#004400'),
+    ])
+
+    # Run application.
+    application = Application(
+        layout=Layout(container, focused_element=input_field),
+        key_bindings=kb,
+        style=style,
+        mouse_support=True,
+        full_screen=True)
+
+    application.run()
+
+
+@click.group()
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[1])
-    parser.add_argument('-r', '--read', action='store_true', help='Put the program in read mode. This way you read the data from the given serial device(s) and write it to the file given or stdout if none given. See the read options section for more read specific options.')
-    parser.add_argument('-t', '--tty', type=port_def, dest='ttys', action=MultiArg, metavar='NAME@BAUDRATE:ALIAS', help="The serial device to read from. Use multiple times to read from more than one serial device(s). For handy reference you can also separate an alias from the tty name with a collon ':'. If an alias is given it will be used as the name of the serial device.")
-    parser.add_argument('-e', '--timing-delta', type=int, metavar='MICROSECONDS', default=100000, help='The timing delta is the amount of microseconds between two bytes that the latter is considered to be part of a new package. The default is 100 miliseconds. Use this option in conjunction with the --timing-print option.')
-    parser.add_argument('-g', '--timing-print', action='store_true', help='Print a line of timing information before every continues stream of bytes. When multiple serial devices are given also print the name or alias of the device where the data is coming from.')
-    parser.add_argument('-a', '--ascii', action='store_true', help="Besides the hexadecimal output also display an extra column with the data in the ASCII representation. Non printable characters are displayed as a dot '.'. The ASCII data is displayed after the hexadecimal data.")
-    parser.add_argument('-u', '--baudrate', type=int, default=9600, help='The baudrate to open the serial port at.')
-    parser.add_argument('-i', '--width', type=int, default=16, help='The number of bytes to display on one line. The default is 16.')
-    parser.add_argument('-v', '--version', action='store_true', help='Output the version information, a small GPL notice and exit.')
-    args = parser.parse_args()
+    pass
 
-    if args.version:
-        print(textwrap.dedent("""
-        ctserial.py version 0.1
-        """))
-        sys.exit(0)
 
-    if not args.ttys:
-        parser.error('please provide at least one --tty')
+@main.command()
+@click.argument('device', type=click.Path(exists=True))
+@click.argument('baudrate', default=9600)
+def connect(device, baudrate):
+    """Connect to a serial device to interact with it"""
+    print('entering connect')
+    ser = serial.Serial(
+        port=device,
+        baudrate=baudrate,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        bytesize=serial.EIGHTBITS)
+    # initiate a serial connection
+    ser.isOpen()
+    # start full screen application
+    application(ser)
 
-    num = 0
-    ttys = args.ttys
-    for tty in ttys:
-        if not tty['baudrate']: tty['baudrate'] = args.baudrate
-        if not tty['alias']: tty['alias'] = 'Port' + str(num)
-        tty['buffer'] = b''
-        tty['ser'] = serial.Serial(tty['port'], baudrate=tty['baudrate'], timeout=0)
-        tty['last_byte'] = clock()
-        num += 1
 
-    try:
-        while True:
-            for tty in ttys:
-                new_data = tty['ser'].read()
-                if len(new_data) > 0:
-                    tty['buffer'] += new_data
-                    tty['last_byte'] = clock()
-            for tty in ttys:
-                if tty['buffer'] and (clock() - tty['last_byte']) > args.timing_delta/1E6:
-                    line = '{0}: {1}\n'.format(dt.now().isoformat(' '), tty['alias'])
-                    sys.stdout.write(line)
-                    while tty['buffer']:
-                        chunk = tty['buffer'][:args.width]
-                        tty['buffer'] = tty['buffer'][args.width:]
-                        fmt = "{{hex:{0}s}}".format(args.width*3)
-                        line = fmt.format(hex=hex_format(chunk))
-                        if args.ascii:
-                            fmt = "{{ascii:{0}s}}".format(args.width)
-                            line += ' ' + fmt.format(ascii=ascii_format(chunk))
-                        line = line.strip()
-                        line += '\n'
-                        sys.stdout.write(line)
-                    sys.stdout.flush()
-    except KeyboardInterrupt:
-        sys.exit(1)
-
-if __name__ == "__main__": main()
+if __name__ == '__main__':
+    main()

@@ -23,90 +23,66 @@ from prompt_toolkit.application import Application
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
 from prompt_toolkit.layout.layout import Layout
+from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 from prompt_toolkit.contrib.completers import WordCompleter
+from tabulate import tabulate
 try:
     import better_exceptions
 except ImportError as err:
     pass
 
 
-help_text = """Connected to serial device {}
-
-Available commands:
-    hex HEX         send hex data (example: "hex 56ffff00080a0007")
-    ascii ASCII     send ASCII data
-    exit            exit application
-
-Press Control-C to exit.
-"""
-def as_hex_chars(charcode):
-    return str.format('{:02x}', charcode)
-
-def as_normal_chars(charcode):
-    if (64 < charcode < 123) or (58 > charcode > 47):
-        return chr(charcode)
-    return '_'
-
-def as_mixed_chars(charcode):
-    if (64 < charcode < 123) or (58 > charcode > 47):
-        return '\033[92m {0}\033[0m'.format(chr(charcode))
-    if charcode == 32:
-        return ' _'
-    if charcode == ord('.'):
-        return ' .'
-    if charcode == 255:
-        return '\033[2m{0}\033[0m'.format(as_hex_chars(charcode))
-    return as_hex_chars(charcode)
+intro = 'Connected to serial device {}\nEntering Hex mode\n\n'
 
 
 def format_output(raw_bytes):
     """ Return hex and ascii decodes aligned on two lines """
-    hex_out = ''.join(map(as_hex_chars, raw_bytes))
-    ascii_out = ' '.join(map(as_normal_chars, raw_bytes))
-    return (hex_out, ascii_out)
+    if len(raw_bytes) == 0:
+        return 'No Response'
+    hex_out = list(bytes([x]).hex() for x in raw_bytes)
+    ascii_out = list(raw_bytes.decode('utf-8', 'replace'))
+    table = [hex_out, ascii_out]
+    return tabulate(table, tablefmt="plain")
 
 
-def send_instruction(ser, tx_raw):
+def send_instruction(ser, tx_bytes):
     """Send data to serial device"""
     # clear out any leftover data
     if ser.inWaiting() > 0:
         ser.flushInput()
-    ser.write(tx_raw)
+    ser.write(tx_bytes)
     time.sleep(0.1)
-    rx_raw = []
+    rx_raw = bytes()
     while ser.inWaiting() > 0:
-        rx_raw.append(ord(ser.read()))
+        rx_raw += ser.read()
     time.sleep(0.1)
-    rx_hex = ''.join(map(as_hex_chars, rx_raw))
-    rx_str = ' '.join(map(as_normal_chars, rx_raw))
-    return '          <-- {}\n               {}'.format(rx_hex, rx_str)
+    return rx_raw
     # return rx_raw
 
 
 def parse_command(input_text, event):
     parts = input_text.split()
     command = parts[0]
+    if command.lower() == 'exit':
+        event.app.set_result(None)
+        return None
     data = parts[1:]
+    raw_str = ''.join(data)
     if command.lower() == 'hex':
-        raw_str = ''.join(data)
         return bytes.fromhex(raw_str)
     elif command.lower() == 'ascii':
-        return b''.join(data)
-    elif command.lower() == 'exit':
-        event.app.set_result(None)
-    else:
-        ''
+        return bytes(raw_str, encoding='utf-8')
 
 
 def application(ser):
     # The layout.
     output_field = TextArea(
         style='class:output-field',
-        text=help_text.format(ser.port))
+        text=intro.format(ser.port))
     completer = WordCompleter(['hex', 'bin', 'ascii'])
     input_field = TextArea(
         height=1,
@@ -114,28 +90,33 @@ def application(ser):
         style='class:input-field',
         completer=completer)
 
-    container = HSplit([
-        input_field,
-        Window(height=1, char='-', style='class:line'),
-        output_field])
+    body = FloatContainer(
+        HSplit([
+            input_field,
+            Window(height=1, char='-', style='class:line'),
+            output_field ]),
+        floats=[
+            Float(xcursor=True,
+                  ycursor=True,
+                  content=CompletionsMenu(max_height=16, scroll_offset=1)) ] )
 
     # The key bindings.
     kb = KeyBindings()
 
     @kb.add('enter', filter=has_focus(input_field))
     def _(event):
-        tx_raw = parse_command(input_field.text, event)
+        tx_bytes = parse_command(input_field.text, event)
+        if type(tx_bytes) != bytes:
+            return
+
         try:
-            rx_raw = str(send_instruction(ser, tx_raw))
+            rx_bytes = send_instruction(ser, tx_bytes)
         except BaseException as e:
-            rx_raw = '\n\n{}'.format(e)
+            rx_bytes = '\n\n{}'.format(e)
 
         output = output_field.text
-        # output += 'tx_raw = ' + str(tx_raw) + '    type= ' + str(type(tx_raw))
-        # output += 'rx_raw = ' + str(format_output(rx_raw))
-        output += '{} -->\n'.format(tx_raw)
-        output += rx_raw
-        # output += '          <-- {[0]}\n               {[1]}'.format(format_output(rx_raw))
+        output += '-->\n' + format_output(tx_bytes) + '\n'
+        output += '<--\n' + format_output(rx_bytes) + '\n'
 
         output_field.buffer.document = Document(
             text=output, cursor_position=len(output))
@@ -149,14 +130,14 @@ def application(ser):
         event.app.set_result(None)
 
     style = Style([
-        ('output-field', 'bg:#000000 #ffffff'),
-        ('input-field', 'bg:#000000 #ffffff'),
+        # ('output-field', 'bg:#000000 #ffffff'),
+        # ('input-field', 'bg:#000000 #ffffff'),
         ('line',        '#004400'),
     ])
 
     # Run application.
     application = Application(
-        layout=Layout(container, focused_element=input_field),
+        layout=Layout(body, focused_element=input_field),
         key_bindings=kb,
         style=style,
         mouse_support=True,

@@ -40,14 +40,22 @@ except ImportError as err:
 intro = 'Connected to serial device {}\nEntering Hex mode\n\n'
 
 
-def format_output(raw_bytes, prefix):
-    """ Return hex and ascii decodes aligned on two lines """
+def format_output(raw_bytes, prefix='', mode='hex'):
+    """ Return hex and utf-8 decodes aligned on two lines """
     if len(raw_bytes) == 0:
         return prefix + 'None'
-    utf8 = raw_bytes.decode('utf-8', 'replace')
-    hex_out = [prefix] + list(x.encode('utf-8').hex() for x in utf8)
-    utf8_out = [' ' * len(prefix)] + list(utf8)
-    table = [hex_out, utf8_out]
+    elif mode == 'hex' or mode == 'ascii':
+        hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
+        ascii_out = [' ' * len(prefix)] + list(raw_bytes.decode('ascii', 'replace'))
+        table = [hex_out, ascii_out]
+    elif mode == 'utf-8':
+        # TODO: track \xefbfdb and replace with actual sent character
+        utf8 = raw_bytes.decode('utf-8', 'replace')
+        utf8_hex_out = [prefix] + list(x.encode('utf-8').hex() for x in utf8)
+        utf8_str_out = [' ' * len(prefix)] + list(utf8)
+        table = [utf8_hex_out, utf8_str_out]
+    else:
+        return prefix + 'Invalid Mode'
     return tabulate(table, tablefmt="plain", stralign='right')
 
 
@@ -67,20 +75,22 @@ def send_instruction(ser, tx_bytes):
 
 
 def parse_command(input_text, event):
+    """Extract command and prepare data to send if applicable"""
     parts = input_text.strip().split(maxsplit=1)
-    command = parts[0]
-    if command.lower() == 'exit':
+    command = parts[0].lower()
+    if command == 'exit':
         event.app.set_result(None)
-        return None
+        return (None, None)
     data = parts[1]
-    raw_str = ''.join(data)
-    if command.lower() == 'hex':
-        if re.match('^[0123456789abcdef\\\\x \'\"]+$', raw_str):
-            raw_hex = re.sub('[\\\\x \'\"]', '', raw_str)
+    if command == 'hex':
+        if re.match('^[0123456789abcdef\\\\x \'\"]+$', data):
+            raw_hex = re.sub('[\\\\x \'\"]', '', data)
             if len(raw_hex) % 2 == 0:
-                return bytes.fromhex(raw_hex)
-    elif command.lower() == 'ascii':
-        return bytes(raw_str, encoding='utf-8')
+                mode = command
+                return (bytes.fromhex(raw_hex), mode)
+    elif command == 'ascii' or command == 'utf-8':
+        mode = command
+        return (bytes(data, encoding='utf-8'), mode)
 
 
 def application(ser):
@@ -88,7 +98,7 @@ def application(ser):
     output_field = TextArea(
         style='class:output-field',
         text=intro.format(ser.port))
-    completer = WordCompleter(['hex', 'bin', 'ascii'])
+    completer = WordCompleter(['hex', 'bin', 'ascii', 'utf-8'])
     history = InMemoryHistory()
     input_field = TextArea(
         height=1,
@@ -111,7 +121,7 @@ def application(ser):
 
     @kb.add('enter', filter=has_focus(input_field))
     def _(event):
-        tx_bytes = parse_command(input_field.text, event)
+        (tx_bytes, mode) = parse_command(input_field.text, event)
         if type(tx_bytes) != bytes:
             return
 
@@ -121,8 +131,8 @@ def application(ser):
             rx_bytes = '\n\n{}'.format(e)
 
         output = output_field.text
-        output += format_output(tx_bytes, prefix='--> ') + '\n'
-        output += format_output(rx_bytes, prefix='<-- ') + '\n'
+        output += format_output(tx_bytes, prefix='--> ', mode=mode) + '\n'
+        output += format_output(rx_bytes, prefix='<-- ', mode=mode) + '\n'
 
         output_field.buffer.document = Document(
             text=output, cursor_position=len(output))

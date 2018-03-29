@@ -22,6 +22,7 @@ import time
 from prompt_toolkit.application import Application
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
+from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
 from prompt_toolkit.layout.layout import Layout
@@ -39,14 +40,14 @@ except ImportError as err:
 intro = 'Connected to serial device {}\nEntering Hex mode\n\n'
 
 
-def format_output(raw_bytes):
+def format_output(raw_bytes, prefix):
     """ Return hex and ascii decodes aligned on two lines """
     if len(raw_bytes) == 0:
-        return 'No Response'
-    hex_out = list(bytes([x]).hex() for x in raw_bytes)
-    ascii_out = list(raw_bytes.decode('utf-8', 'replace'))
+        return prefix + 'None'
+    hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
+    ascii_out = [' ' * len(prefix)] + list(raw_bytes.decode('utf-8', 'replace'))
     table = [hex_out, ascii_out]
-    return tabulate(table, tablefmt="plain")
+    return tabulate(table, tablefmt="plain", stralign='right')
 
 
 def send_instruction(ser, tx_bytes):
@@ -65,15 +66,18 @@ def send_instruction(ser, tx_bytes):
 
 
 def parse_command(input_text, event):
-    parts = input_text.split()
+    parts = input_text.strip().split(maxsplit=1)
     command = parts[0]
     if command.lower() == 'exit':
         event.app.set_result(None)
         return None
-    data = parts[1:]
+    data = parts[1]
     raw_str = ''.join(data)
     if command.lower() == 'hex':
-        return bytes.fromhex(raw_str)
+        if re.match('^[0123456789abcdef\\\\x \'\"]+$', raw_str):
+            raw_hex = re.sub('[\\\\x \'\"]', '', raw_str)
+            if len(raw_hex) % 2 == 0:
+                return bytes.fromhex(raw_hex)
     elif command.lower() == 'ascii':
         return bytes(raw_str, encoding='utf-8')
 
@@ -84,6 +88,7 @@ def application(ser):
         style='class:output-field',
         text=intro.format(ser.port))
     completer = WordCompleter(['hex', 'bin', 'ascii'])
+    history = InMemoryHistory()
     input_field = TextArea(
         height=1,
         prompt='>>> ',
@@ -115,8 +120,8 @@ def application(ser):
             rx_bytes = '\n\n{}'.format(e)
 
         output = output_field.text
-        output += '-->\n' + format_output(tx_bytes) + '\n'
-        output += '<--\n' + format_output(rx_bytes) + '\n'
+        output += format_output(tx_bytes, prefix='--> ') + '\n'
+        output += format_output(rx_bytes, prefix='<-- ') + '\n'
 
         output_field.buffer.document = Document(
             text=output, cursor_position=len(output))

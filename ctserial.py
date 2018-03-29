@@ -44,9 +44,10 @@ def format_output(raw_bytes, prefix):
     """ Return hex and ascii decodes aligned on two lines """
     if len(raw_bytes) == 0:
         return prefix + 'None'
-    hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
-    ascii_out = [' ' * len(prefix)] + list(raw_bytes.decode('utf-8', 'replace'))
-    table = [hex_out, ascii_out]
+    utf8 = raw_bytes.decode('utf-8', 'replace')
+    hex_out = [prefix] + list(x.encode('utf-8').hex() for x in utf8)
+    utf8_out = [' ' * len(prefix)] + list(utf8)
+    table = [hex_out, utf8_out]
     return tabulate(table, tablefmt="plain", stralign='right')
 
 

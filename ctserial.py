@@ -39,32 +39,23 @@ try:
 except ImportError as err:
     pass
 
+
 class MyApplication(Application):
-    device = None
-    mode = 'hex'
+    device = ''
+    mode = ''
+
 
 def get_statusbar_text():
-    # sep = '  '
-    # dev = 'connected:' + sep
-    # mode += 'mode:' + get_app().mode
-    # return sep.join([dev,mode])
-    return 'mode:' + get_app().mode
+    sep = ' - '
+    mode = 'mode:' + get_app().mode
+    device = 'connected:' + get_app().device
+    return sep.join([mode, device])
+
 
 def do_exit():
     '''Exit the application'''
     get_app().exit()
 
-def do_cmd():
-    get_app().mode = 'cmd'
-
-def do_mode(mode):
-    '''Change mode between hex, ascii, and utf-8'''
-    get_app().mode = mode
-
-def do_debug():
-    '''Starts a Python Debugger session'''
-    # import pdb
-    # pdb.set_trace()
 
 def format_output(raw_bytes, mode, prefix=''):
     """ Return hex and utf-8 decodes aligned on two lines """
@@ -88,13 +79,13 @@ def format_output(raw_bytes, mode, prefix=''):
 def send_instruction(ser, tx_bytes):
     """Send data to serial device"""
     # clear out any leftover data
-    if ser.inWaiting() > 0:
-        ser.flushInput()
-    ser.write(tx_bytes)
+    if connection.inWaiting() > 0:
+        connection.flushInput()
+    connection.write(tx_bytes)
     time.sleep(0.1)
     rx_raw = bytes()
-    while ser.inWaiting() > 0:
-        rx_raw += ser.read()
+    while connection.inWaiting() > 0:
+        rx_raw += connection.read()
     time.sleep(0.1)
     return rx_raw
     # return rx_raw
@@ -130,7 +121,7 @@ def parse_command(input_text, event):
     return False
 
 
-def start_app(ser):
+def start_app(mode, connection):
     '''Text-based GUI application'''
     completer = WordCompleter(['hex', 'ascii', 'utf-8'])
     history = InMemoryHistory()
@@ -168,23 +159,17 @@ def start_app(ser):
     root_container = MenuContainer(
         body=body,
         menu_items=[
-            MenuItem('Project', children=[
+            MenuItem('Project ', children=[
                 MenuItem('New'),
                 MenuItem('Open'),
                 MenuItem('Save'),
                 MenuItem('Save as...'),
                 MenuItem('-', disabled=True),
                 MenuItem('Exit', handler=do_exit),  ]),
-            MenuItem('Mode', children=[
-                MenuItem('CMD', handler=do_cmd()),
-                MenuItem('HEX', handler=do_mode('hex')),
-                MenuItem('ASCII', handler=do_mode('ascii')),
-                MenuItem('UTF-8', handler=do_mode('utf-8')),  ]),
-            MenuItem('View', children=[
+            MenuItem('View ', children=[
                 MenuItem('Split'),  ]),
-            MenuItem('Info', children=[
+            MenuItem('Info ', children=[
                 MenuItem('Help'),
-                MenuItem('Debug', handler=do_debug()),
                 MenuItem('About'),  ]),  ],
         floats=[
             Float(xcursor=True,
@@ -228,7 +213,7 @@ def start_app(ser):
     @kb.add('c-q')
     def _(event):
         " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
-        ser.close()
+        connection.close()
         event.app.exit()
 
     @kb.add('c-a')
@@ -259,7 +244,8 @@ def start_app(ser):
         style=style,
         mouse_support=True,
         full_screen=True  )
-    # application.device = ser.port
+    application.mode = mode
+    application.device = connection.port
     application.run()
 
 
@@ -274,16 +260,16 @@ def main():
 def connect(device, baudrate):
     """Connect to a serial device to interact with it"""
     print('entering connect')
-    ser = serial.Serial(
+    connection = serial.Serial(
         port=device,
         baudrate=baudrate,
         parity=serial.PARITY_NONE,
         stopbits=serial.STOPBITS_ONE,
         bytesize=serial.EIGHTBITS)
     # initiate a serial connection
-    ser.isOpen()
+    connection.isOpen()
     # start full screen application
-    start_app(ser)
+    start_app(mode='connect', connection=connection)
 
 
 if __name__ == '__main__':

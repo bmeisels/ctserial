@@ -20,15 +20,18 @@ import serial
 import re
 import time
 from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
+from prompt_toolkit.layout.containers import HSplit, VSplit, Window, FloatContainer, Float, Align
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.menus import CompletionsMenu
+from prompt_toolkit.shortcuts.dialogs import message_dialog
 from prompt_toolkit.styles import Style
-from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.widgets import TextArea, MenuContainer, MenuItem, ProgressBar
 from prompt_toolkit.contrib.completers import WordCompleter
 from tabulate import tabulate
 try:
@@ -36,11 +39,34 @@ try:
 except ImportError as err:
     pass
 
+class MyApplication(Application):
+    device = None
+    mode = 'hex'
 
-intro = 'Connected to serial device {}\nEntering Hex mode\n\n'
+def get_statusbar_text():
+    # sep = '  '
+    # dev = 'connected:' + sep
+    # mode += 'mode:' + get_app().mode
+    # return sep.join([dev,mode])
+    return 'mode:' + get_app().mode
 
+def do_exit():
+    '''Exit the application'''
+    get_app().exit()
 
-def format_output(raw_bytes, prefix='', mode='hex'):
+def do_cmd():
+    get_app().mode = 'cmd'
+
+def do_mode(mode):
+    '''Change mode between hex, ascii, and utf-8'''
+    get_app().mode = mode
+
+def do_debug():
+    '''Starts a Python Debugger session'''
+    # import pdb
+    # pdb.set_trace()
+
+def format_output(raw_bytes, mode, prefix=''):
     """ Return hex and utf-8 decodes aligned on two lines """
     if len(raw_bytes) == 0:
         return prefix + 'None'
@@ -74,65 +100,125 @@ def send_instruction(ser, tx_bytes):
     # return rx_raw
 
 
+def format_input(input_text, mode):
+    if mode == 'hex':
+        if re.match('^[0123456789abcdef\\\\x \'\"]+$', input_text):
+            raw_hex = re.sub('[\\\\x \'\"]', '', input_text)
+            if len(raw_hex) % 2 == 0:
+                return bytes.fromhex(raw_hex)
+            else:
+                return False
+    elif mode == 'ascii' or mode == 'utf-8':
+        return bytes(input_text, encoding='utf-8')
+    else:
+        return False
+
+
 def parse_command(input_text, event):
-    """Extract command and prepare data to send if applicable"""
-    parts = input_text.strip().split(maxsplit=1)
+    """Return bytes to send, None if nothing to send, or False if invalid"""
+    parts = input_text.split(maxsplit=2)
     command = parts[0].lower()
     if command == 'exit':
-        event.app.set_result(None)
-        return (None, None)
-    data = parts[1]
-    if command == 'hex':
-        if re.match('^[0123456789abcdef\\\\x \'\"]+$', data):
-            raw_hex = re.sub('[\\\\x \'\"]', '', data)
-            if len(raw_hex) % 2 == 0:
-                mode = command
-                return (bytes.fromhex(raw_hex), mode)
-    elif command == 'ascii' or command == 'utf-8':
-        mode = command
-        return (bytes(data, encoding='utf-8'), mode)
+        event.app.exit()
+        return None
+    elif command == 'send' and len(parts) >= 2:
+        subcommand = parts[1].lower()
+        if subcommand in ['hex', 'ascii', 'utf-8'] and len(parts) == 3:
+            data = parts[2]
+            tx_bytes = format_input(data, subcommand)
+            return tx_bytes
+    return False
 
 
-def application(ser):
-    # The layout.
-    output_field = TextArea(
-        style='class:output-field',
-        text=intro.format(ser.port))
-    completer = WordCompleter(['hex', 'bin', 'ascii', 'utf-8'])
+def start_app(ser):
+    '''Text-based GUI application'''
+    completer = WordCompleter(['hex', 'ascii', 'utf-8'])
     history = InMemoryHistory()
+
+    # Individual windows
     input_field = TextArea(
         height=1,
-        prompt='>>> ',
+        prompt='ctserial> ',
         style='class:input-field',
         completer=completer)
 
+    output_field = TextArea(
+        scrollbar=True,
+        style='class:output-field',
+        text='')
+
+    statusbar = Window(
+        content = FormattedTextControl(get_statusbar_text),
+        height=1,
+        style='class:statusbar'  )
+
+    # Organization of windows
     body = FloatContainer(
         HSplit([
             input_field,
             Window(height=1, char='-', style='class:line'),
-            output_field ]),
+            output_field,
+            statusbar ]),
         floats=[
             Float(xcursor=True,
                   ycursor=True,
                   content=CompletionsMenu(max_height=16, scroll_offset=1)) ] )
+
+    # Adding menus
+    root_container = MenuContainer(
+        body=body,
+        menu_items=[
+            MenuItem('Project', children=[
+                MenuItem('New'),
+                MenuItem('Open'),
+                MenuItem('Save'),
+                MenuItem('Save as...'),
+                MenuItem('-', disabled=True),
+                MenuItem('Exit', handler=do_exit),  ]),
+            MenuItem('Mode', children=[
+                MenuItem('CMD', handler=do_cmd()),
+                MenuItem('HEX', handler=do_mode('hex')),
+                MenuItem('ASCII', handler=do_mode('ascii')),
+                MenuItem('UTF-8', handler=do_mode('utf-8')),  ]),
+            MenuItem('View', children=[
+                MenuItem('Split'),  ]),
+            MenuItem('Info', children=[
+                MenuItem('Help'),
+                MenuItem('Debug', handler=do_debug()),
+                MenuItem('About'),  ]),  ],
+        floats=[
+            Float(xcursor=True,
+                  ycursor=True,
+                  content=CompletionsMenu(max_height=16, scroll_offset=1)),  ])
 
     # The key bindings.
     kb = KeyBindings()
 
     @kb.add('enter', filter=has_focus(input_field))
     def _(event):
-        (tx_bytes, mode) = parse_command(input_field.text, event)
-        if type(tx_bytes) != bytes:
+        # Process commands on prompt after hitting enter key
+        tx_bytes = parse_command(input_field.text, event=event)
+
+        # For commands that do not send data to serial device
+        if tx_bytes == None:
+            input_field.text = ''
+            return
+        # For invalid commands forcing users to correct them
+        elif tx_bytes == False:
             return
 
+        # For commands that send data to serial device
         try:
             rx_bytes = send_instruction(ser, tx_bytes)
         except BaseException as e:
-            rx_bytes = '\n\n{}'.format(e)
+            output = '\n\n{}'.format(e)
+            output_field.buffer.document = Document(
+                text=output, cursor_position=len(output))
+            return
 
         output = output_field.text
-        output += format_output(tx_bytes, prefix='--> ', mode=mode) + '\n'
-        output += format_output(rx_bytes, prefix='<-- ', mode=mode) + '\n'
+        output += format_output(tx_bytes, mode=event.app.mode, prefix='--> ') + '\n'
+        output += format_output(rx_bytes, mode=event.app.mode, prefix='<-- ') + '\n'
 
         output_field.buffer.document = Document(
             text=output, cursor_position=len(output))
@@ -143,22 +229,37 @@ def application(ser):
     def _(event):
         " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
         ser.close()
-        event.app.set_result(None)
+        event.app.exit()
+
+    @kb.add('c-a')
+    def _(event):
+        event.app.mode = 'cmd'
+
+    @kb.add('c-d')
+    def _(event):
+        """Press Ctrl-D for debug mode"""
+        import pdb
+        pdb.set_trace()
+
+    @kb.add('escape')
+    def _(event):
+        """ Pressing ESC key will enter toggle input mode"""
+        input_field.prompt = 'cmd> '
 
     style = Style([
         # ('output-field', 'bg:#000000 #ffffff'),
         # ('input-field', 'bg:#000000 #ffffff'),
         ('line',        '#004400'),
-    ])
+        ('statusbar', 'bg:#AAAAAA')  ])
 
     # Run application.
-    application = Application(
-        layout=Layout(body, focused_element=input_field),
+    application = MyApplication(
+        layout=Layout(root_container, focused_element=input_field),
         key_bindings=kb,
         style=style,
         mouse_support=True,
-        full_screen=True)
-
+        full_screen=True  )
+    # application.device = ser.port
     application.run()
 
 
@@ -182,7 +283,7 @@ def connect(device, baudrate):
     # initiate a serial connection
     ser.isOpen()
     # start full screen application
-    application(ser)
+    start_app(ser)
 
 
 if __name__ == '__main__':

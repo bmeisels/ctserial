@@ -19,6 +19,7 @@ import sys
 import serial
 import re
 import time
+import shlex
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
@@ -43,40 +44,44 @@ except ImportError as err:
 class MyApplication(Application):
     device = ''
     mode = ''
+    output_format = 'mixed'
 
 
 def get_statusbar_text():
     sep = ' - '
     mode = 'mode:' + get_app().mode
     device = 'connected:' + get_app().device
-    return sep.join([mode, device])
+    output_format = 'output:' + get_app().output_format
+    # return sep.join([mode, output, device])
+    return 'text'
 
 
 def do_exit():
-    '''Exit the application'''
+    """Exit the application"""
     get_app().exit()
 
 
-def format_output(raw_bytes, mode, prefix=''):
+def format_output(raw_bytes, output_format, prefix=''):
     """ Return hex and utf-8 decodes aligned on two lines """
     if len(raw_bytes) == 0:
         return prefix + 'None'
-    elif mode == 'hex' or mode == 'ascii':
+    table = []
+    if output_format == 'hex' or output_format == 'mixed':
         hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
+        table.append(hex_out)
+    if output_format == 'ascii' or output_format == 'mixed':
         ascii_out = [' ' * len(prefix)] + list(raw_bytes.decode('ascii', 'replace'))
-        table = [hex_out, ascii_out]
-    elif mode == 'utf-8':
+        table.append(ascii_out)
+    if output_format == 'utf-8':
         # TODO: track \xefbfdb and replace with actual sent character
         utf8 = raw_bytes.decode('utf-8', 'replace')
         utf8_hex_out = [prefix] + list(x.encode('utf-8').hex() for x in utf8)
         utf8_str_out = [' ' * len(prefix)] + list(utf8)
         table = [utf8_hex_out, utf8_str_out]
-    else:
-        return prefix + 'Invalid Mode'
     return tabulate(table, tablefmt="plain", stralign='right')
 
 
-def send_instruction(ser, tx_bytes):
+def send_instruction(connection, tx_bytes):
     """Send data to serial device"""
     # clear out any leftover data
     if connection.inWaiting() > 0:
@@ -91,39 +96,48 @@ def send_instruction(ser, tx_bytes):
     # return rx_raw
 
 
-def format_input(input_text, mode):
-    if mode == 'hex':
-        if re.match('^[0123456789abcdef\\\\x \'\"]+$', input_text):
-            raw_hex = re.sub('[\\\\x \'\"]', '', input_text)
+def format_input(input_text, input_format):
+    if input_format == 'hex':
+        data = input_text.lower()
+        if re.match('^[0123456789abcdef\\\\x ]+$', data):
+            raw_hex = re.sub('[\\\\x ]', '', data)
             if len(raw_hex) % 2 == 0:
                 return bytes.fromhex(raw_hex)
-            else:
-                return False
-    elif mode == 'ascii' or mode == 'utf-8':
+    if input_format == 'string':
         return bytes(input_text, encoding='utf-8')
-    else:
-        return False
+    return False
 
 
 def parse_command(input_text, event):
     """Return bytes to send, None if nothing to send, or False if invalid"""
-    parts = input_text.split(maxsplit=2)
+    parts = input_text.split(maxsplit=1)
     command = parts[0].lower()
     if command == 'exit':
         event.app.exit()
         return None
-    elif command == 'send' and len(parts) >= 2:
-        subcommand = parts[1].lower()
-        if subcommand in ['hex', 'ascii', 'utf-8'] and len(parts) == 3:
-            data = parts[2]
-            tx_bytes = format_input(data, subcommand)
-            return tx_bytes
+    elif command == 'send' and len(parts) > 1:
+        # remove spaces not in quotes and format
+        data = ''.join(shlex.split(parts[1]))
+        tx_bytes = format_input(data, 'string')
+        return tx_bytes
+    elif command == 'sendhex' and len(parts) > 1:
+        data = parts[1]
+        tx_bytes = format_input(data, 'hex')
+        return tx_bytes
     return False
 
 
 def start_app(mode, connection):
-    '''Text-based GUI application'''
-    completer = WordCompleter(['hex', 'ascii', 'utf-8'])
+    """Text-based GUI application"""
+    completer = WordCompleter([
+        'send',
+        'sendhex',
+        'exit'],
+        meta_dict={
+            'send':'Send string to serial device',
+            'sendhex':'Send raw hex to serial device',
+            'exit':'Exit application'},
+        ignore_case=True  )
     history = InMemoryHistory()
 
     # Individual windows
@@ -194,7 +208,7 @@ def start_app(mode, connection):
 
         # For commands that send data to serial device
         try:
-            rx_bytes = send_instruction(ser, tx_bytes)
+            rx_bytes = send_instruction(connection, tx_bytes)
         except BaseException as e:
             output = '\n\n{}'.format(e)
             output_field.buffer.document = Document(
@@ -202,8 +216,8 @@ def start_app(mode, connection):
             return
 
         output = output_field.text
-        output += format_output(tx_bytes, mode=event.app.mode, prefix='--> ') + '\n'
-        output += format_output(rx_bytes, mode=event.app.mode, prefix='<-- ') + '\n'
+        output += format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
+        output += format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
 
         output_field.buffer.document = Document(
             text=output, cursor_position=len(output))

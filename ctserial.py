@@ -17,9 +17,8 @@ Control Things Serial, aka ctserial.py
 import click
 import sys
 import serial
-import re
 import time
-import shlex
+from commands import Commands
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
@@ -34,7 +33,6 @@ from prompt_toolkit.shortcuts.dialogs import message_dialog
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea, MenuContainer, MenuItem, ProgressBar
 from prompt_toolkit.contrib.completers import WordCompleter
-from tabulate import tabulate
 try:
     import better_exceptions
 except ImportError as err:
@@ -42,89 +40,19 @@ except ImportError as err:
 
 
 class MyApplication(Application):
-    device = ''
+    connection = ''
     mode = ''
     output_format = 'mixed'
+    output_format = 'utf-8'
 
 
 def get_statusbar_text():
     sep = ' - '
     mode = 'mode:' + get_app().mode
-    device = 'connected:' + get_app().device
+    device = 'connected:' + get_app().connection.port
     output_format = 'output:' + get_app().output_format
-    # return sep.join([mode, output, device])
-    return 'text'
-
-
-def do_exit():
-    """Exit the application"""
-    get_app().exit()
-
-
-def format_output(raw_bytes, output_format, prefix=''):
-    """ Return hex and utf-8 decodes aligned on two lines """
-    if len(raw_bytes) == 0:
-        return prefix + 'None'
-    table = []
-    if output_format == 'hex' or output_format == 'mixed':
-        hex_out = [prefix] + list(bytes([x]).hex() for x in raw_bytes)
-        table.append(hex_out)
-    if output_format == 'ascii' or output_format == 'mixed':
-        ascii_out = [' ' * len(prefix)] + list(raw_bytes.decode('ascii', 'replace'))
-        table.append(ascii_out)
-    if output_format == 'utf-8':
-        # TODO: track \xefbfdb and replace with actual sent character
-        utf8 = raw_bytes.decode('utf-8', 'replace')
-        utf8_hex_out = [prefix] + list(x.encode('utf-8').hex() for x in utf8)
-        utf8_str_out = [' ' * len(prefix)] + list(utf8)
-        table = [utf8_hex_out, utf8_str_out]
-    return tabulate(table, tablefmt="plain", stralign='right')
-
-
-def send_instruction(connection, tx_bytes):
-    """Send data to serial device"""
-    # clear out any leftover data
-    if connection.inWaiting() > 0:
-        connection.flushInput()
-    connection.write(tx_bytes)
-    time.sleep(0.1)
-    rx_raw = bytes()
-    while connection.inWaiting() > 0:
-        rx_raw += connection.read()
-    time.sleep(0.1)
-    return rx_raw
-    # return rx_raw
-
-
-def format_input(input_text, input_format):
-    if input_format == 'hex':
-        data = input_text.lower()
-        if re.match('^[0123456789abcdef\\\\x ]+$', data):
-            raw_hex = re.sub('[\\\\x ]', '', data)
-            if len(raw_hex) % 2 == 0:
-                return bytes.fromhex(raw_hex)
-    if input_format == 'string':
-        return bytes(input_text, encoding='utf-8')
-    return False
-
-
-def parse_command(input_text, event):
-    """Return bytes to send, None if nothing to send, or False if invalid"""
-    parts = input_text.split(maxsplit=1)
-    command = parts[0].lower()
-    if command == 'exit':
-        event.app.exit()
-        return None
-    elif command == 'send' and len(parts) > 1:
-        # remove spaces not in quotes and format
-        data = ''.join(shlex.split(parts[1]))
-        tx_bytes = format_input(data, 'string')
-        return tx_bytes
-    elif command == 'sendhex' and len(parts) > 1:
-        data = parts[1]
-        tx_bytes = format_input(data, 'hex')
-        return tx_bytes
-    return False
+    return sep.join([mode, device, output_format])
+    # return 'text'
 
 
 def start_app(mode, connection):
@@ -139,6 +67,7 @@ def start_app(mode, connection):
             'exit':'Exit application'},
         ignore_case=True  )
     history = InMemoryHistory()
+    cmd = Commands()
 
     # Individual windows
     input_field = TextArea(
@@ -179,7 +108,7 @@ def start_app(mode, connection):
                 MenuItem('Save'),
                 MenuItem('Save as...'),
                 MenuItem('-', disabled=True),
-                MenuItem('Exit', handler=do_exit),  ]),
+                MenuItem('Exit', handler=cmd.do_exit),  ]),
             MenuItem('View ', children=[
                 MenuItem('Split'),  ]),
             MenuItem('Info ', children=[
@@ -196,31 +125,19 @@ def start_app(mode, connection):
     @kb.add('enter', filter=has_focus(input_field))
     def _(event):
         # Process commands on prompt after hitting enter key
-        tx_bytes = parse_command(input_field.text, event=event)
+        # tx_bytes = parse_command(input_field.text, event=event)
+        output_text = cmd.execute(input_field.text, output_field.text, event)
 
         # For commands that do not send data to serial device
-        if tx_bytes == None:
+        if output_text == None:
             input_field.text = ''
             return
         # For invalid commands forcing users to correct them
-        elif tx_bytes == False:
+        elif output_text == False:
             return
-
-        # For commands that send data to serial device
-        try:
-            rx_bytes = send_instruction(connection, tx_bytes)
-        except BaseException as e:
-            output = '\n\n{}'.format(e)
-            output_field.buffer.document = Document(
-                text=output, cursor_position=len(output))
-            return
-
-        output = output_field.text
-        output += format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
-        output += format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
 
         output_field.buffer.document = Document(
-            text=output, cursor_position=len(output))
+            text=output_text, cursor_position=len(output_text))
         input_field.text = ''
 
     @kb.add('c-c')
@@ -259,7 +176,7 @@ def start_app(mode, connection):
         mouse_support=True,
         full_screen=True  )
     application.mode = mode
-    application.device = connection.port
+    application.connection = connection
     application.run()
 
 

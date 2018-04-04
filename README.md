@@ -6,6 +6,12 @@ ctserial is a security professional's swiss army knife for interacting with raw 
 
 ctserial connect /dev/your-serial-device
 
+This opens the ctserial application conntect to your serial device.  From there you have a prompt to interact with your serial device, complete with tab completion.  For example:
+
+  ctmodbus> sendhex deadc0de
+  ctmodbus> send "Dead Code 国"
+  ctmodbus> exit
+
 # Platform Independence
 
 Python and the [PySerial][] package this software depends on are available for all major operating systems.

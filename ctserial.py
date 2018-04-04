@@ -57,17 +57,9 @@ def get_statusbar_text():
 
 def start_app(mode, connection):
     """Text-based GUI application"""
-    completer = WordCompleter([
-        'send',
-        'sendhex',
-        'exit'],
-        meta_dict={
-            'send':'Send string to serial device',
-            'sendhex':'Send raw hex to serial device',
-            'exit':'Exit application'},
-        ignore_case=True  )
-    history = InMemoryHistory()
     cmd = Commands()
+    completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
+    history = InMemoryHistory()
 
     # Individual windows
     input_field = TextArea(

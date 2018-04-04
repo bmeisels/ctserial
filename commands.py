@@ -42,7 +42,20 @@ class Commands(object):
         return func(arg, output_text, event)
 
 
+    def commands(self):
+        commands = [a[3:] for a in dir(self.__class__) if a.startswith('do_')]
+        return commands
+
+    def meta_dict(self):
+        meta_dict = {}
+        for command in self.commands():
+            # TODO: find a better way to do this than eval
+            meta_dict[command] = eval('self.do_' + command + '.__doc__')
+        return meta_dict
+
+
     def do_clear(self, input_text, output_text, event):
+        """Clear the screen."""
         return ''
 
 
@@ -52,7 +65,11 @@ class Commands(object):
         output_text += 'This application allows you to interact directly with '
         output_text += 'serial devices.  You can do this by typing commands at '
         output_text += 'the prompt above, the output of which will appear in '
-        output_text += 'this space.\n'
+        output_text += 'this space.\n\n'
+        table = []
+        for key, value in self.meta_dict().items():
+            table.append([key, value])
+        output_text += tabulate(table, tablefmt="plain")
         return output_text
 
 

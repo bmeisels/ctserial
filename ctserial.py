@@ -135,10 +135,11 @@ def start_app(mode, connection):
         # For invalid commands forcing users to correct them
         elif output_text == False:
             return
-
-        output_field.buffer.document = Document(
-            text=output_text, cursor_position=len(output_text))
-        input_field.text = ''
+        # For invalid commands forcing users to correct them
+        else:
+            output_field.buffer.document = Document(
+                text=output_text, cursor_position=len(output_text))
+            input_field.text = ''
 
     @kb.add('c-c')
     @kb.add('c-q')

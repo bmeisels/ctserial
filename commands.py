@@ -22,7 +22,7 @@ class Commands(object):
     """Commands that users may use at the application prompt."""
     # Each function that users can call must:
     #     - start with a do_
-    #     - accept self and event as params
+    #     - accept self, input_text, output_text, and event as params
     #     - return a string to print, None, or False
     # Returning a False does nothing, forcing users to correct mistakes
 
@@ -40,6 +40,10 @@ class Commands(object):
         except AttributeError:
             return False
         return func(arg, output_text, event)
+
+
+    def do_clear(self, input_text, output_text, event):
+        return ''
 
 
     def do_help(self, input_text, output_text, event):

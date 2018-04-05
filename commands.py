@@ -44,6 +44,7 @@ class Commands(object):
 
     def commands(self):
         commands = [a[3:] for a in dir(self.__class__) if a.startswith('do_')]
+
         return commands
 
     def meta_dict(self):
@@ -57,6 +58,27 @@ class Commands(object):
     def do_clear(self, input_text, output_text, event):
         """Clear the screen."""
         return ''
+
+
+    def do_connect(self, input_text, output_text, event):
+        """Generate a session with a single serial device to interact with it."""
+        # def connect(device, baudrate):
+        event.app.session = serial.Serial(
+            port=device,
+            baudrate=baudrate,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            bytesize=serial.EIGHTBITS)
+        # initiate a serial session
+        event.app.session.isOpen()
+        return 'Connect session opened with {}'.format('test')
+
+
+    def do_close(self, input_text, output_text, event):
+        """Close a session."""
+        device = event.app.session.port
+        event.app.session.close()
+        Return 'Session with {} closed.'.format(device)
 
 
     def do_help(self, input_text, output_text, event):
@@ -75,20 +97,23 @@ class Commands(object):
 
     def do_exit(self, input_text, output_text, event):
         """Exit the application."""
+        device = event.app.session.port
+        event.app.session.close()
         event.app.exit()
+        Return 'Closing application and all sessions.'
 
 
-    def _send_instruction(self, connection, tx_bytes):
+    def _send_instruction(self, session, tx_bytes):
         """Send data to serial device"""
         # clear out any leftover data
         try:
-            if connection.inWaiting() > 0:
-                connection.flushInput()
-            connection.write(tx_bytes)
+            if session.inWaiting() > 0:
+                session.flushInput()
+            session.write(tx_bytes)
             time.sleep(0.1)
             rx_raw = bytes()
-            while connection.inWaiting() > 0:
-                rx_raw += connection.read()
+            while session.inWaiting() > 0:
+                rx_raw += session.read()
         except BaseException as e:
             output = '\n\n{}'.format(e)
         time.sleep(0.1)
@@ -122,8 +147,8 @@ class Commands(object):
             raw_hex = re.sub('[\\\\x ]', '', data)
             if len(raw_hex) % 2 == 0:
                 tx_bytes = bytes.fromhex(raw_hex)
-                connection = event.app.connection
-                rx_bytes = self._send_instruction(connection, tx_bytes)
+                session = event.app.session
+                rx_bytes = self._send_instruction(session, tx_bytes)
                 output_text += self._format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
                 output_text += self._format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
                 return output_text
@@ -135,8 +160,8 @@ class Commands(object):
         # remove spaces not in quotes and format
         string = ''.join(shlex.split(input_text))
         tx_bytes = bytes(string, encoding='utf-8')
-        connection = event.app.connection
-        rx_bytes = self._send_instruction(connection, tx_bytes)
+        session = event.app.session
+        rx_bytes = self._send_instruction(session, tx_bytes)
         output_text += self._format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
         output_text += self._format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
         return output_text

@@ -14,7 +14,7 @@ Control Things Serial, aka ctserial.py
 # details at <http://www.gnu.org/licenses/>.
 """
 
-import click
+# import click
 import sys
 import serial
 import time
@@ -40,22 +40,21 @@ except ImportError as err:
 
 
 class MyApplication(Application):
-    connection = ''
-    mode = ''
+    session = ''
     output_format = 'mixed'
     output_format = 'utf-8'
 
 
 def get_statusbar_text():
     sep = ' - '
-    mode = 'mode:' + get_app().mode
-    device = 'connected:' + get_app().connection.port
+    device = 'connected:' + get_app().session.port
     output_format = 'output:' + get_app().output_format
-    return sep.join([mode, device, output_format])
+    return sep.join([device, output_format])
     # return 'text'
 
 
-def start_app(mode, connection):
+# def start_app(session):
+def start_app():
     """Text-based GUI application"""
     cmd = Commands()
     completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
@@ -137,23 +136,14 @@ def start_app(mode, connection):
     @kb.add('c-q')
     def _(event):
         " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
-        connection.close()
+        session.close()
         event.app.exit()
-
-    @kb.add('c-a')
-    def _(event):
-        event.app.mode = 'cmd'
 
     @kb.add('c-d')
     def _(event):
-        """Press Ctrl-D for debug mode"""
+        """Press Ctrl-D to start the python debugger"""
         import pdb
         pdb.set_trace()
-
-    @kb.add('escape')
-    def _(event):
-        """ Pressing ESC key will enter toggle input mode"""
-        input_field.prompt = 'cmd> '
 
     style = Style([
         # ('output-field', 'bg:#000000 #ffffff'),
@@ -168,33 +158,33 @@ def start_app(mode, connection):
         style=style,
         mouse_support=True,
         full_screen=True  )
-    application.mode = mode
-    application.connection = connection
+    # application.session = session
     application.run()
 
 
-@click.group()
-def main():
-    pass
-
-
-@main.command()
-@click.argument('device', type=click.Path(exists=True))
-@click.argument('baudrate', default=9600)
-def connect(device, baudrate):
-    """Connect to a serial device to interact with it"""
-    print('entering connect')
-    connection = serial.Serial(
-        port=device,
-        baudrate=baudrate,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        bytesize=serial.EIGHTBITS)
-    # initiate a serial connection
-    connection.isOpen()
-    # start full screen application
-    start_app(mode='connect', connection=connection)
+# @click.group()
+# def main():
+#     pass
+#
+#
+# @main.command()
+# @click.argument('device', type=click.Path(exists=True))
+# @click.argument('baudrate', default=9600)
+# def connect(device, baudrate):
+#     """Connect to a serial device to interact with it"""
+#     print('entering connect')
+#     session = serial.Serial(
+#         port=device,
+#         baudrate=baudrate,
+#         parity=serial.PARITY_NONE,
+#         stopbits=serial.STOPBITS_ONE,
+#         bytesize=serial.EIGHTBITS)
+#     # initiate a serial session
+#     session.isOpen()
+#     # start full screen application
+#     start_app(session=session)
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    start_app()

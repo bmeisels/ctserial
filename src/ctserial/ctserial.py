@@ -18,7 +18,7 @@ import click
 import sys
 import serial
 import time
-from commands import Commands
+from .commands import Commands
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document

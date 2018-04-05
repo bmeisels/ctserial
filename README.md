@@ -30,16 +30,7 @@ ctmodbus> exit
 
 # Platform Independence
 
-Python 3.5+ and all dependencies are avaiable for all major operating systems.  It is primarily developed on MacOS and Linux, but should work in Windows as well.
-
-Dependencies::
-
-```
-pyserial
-prompt_toolkit (version 2.0+)
-tabulate
-click
-```
+Python 3.5+ and all dependencies are available for all major operating systems.  It is primarily developed on MacOS and Linux, but should work in Windows as well.
 
 * [PySerial](http://pyserial.sourceforge.net/)
 

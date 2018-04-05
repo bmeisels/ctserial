@@ -32,8 +32,6 @@ ctmodbus> exit
 
 Python 3.5+ and all dependencies are available for all major operating systems.  It is primarily developed on MacOS and Linux, but should work in Windows as well.
 
-* [PySerial](http://pyserial.sourceforge.net/)
-
 # Author
 
 * Justin Searle <justin@controlthings.io>

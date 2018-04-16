@@ -5,8 +5,9 @@ ctserial is a security professional's swiss army knife for interacting with raw 
 # Installation:
 
 ```
-git clone https://github.com/ControlThingsTools/ctserial.git
 pip3 install -e git+https://github.com/jonathanslenders/python-prompt-toolkit@2.0#egg=prompt_toolkit
+git clone https://github.com/ControlThingsTools/ctserial.git
+cd ctserial
 python3 setup.py install
 ```
 

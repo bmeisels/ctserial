@@ -43,7 +43,6 @@ class MyApplication(Application):
     connection = ''
     mode = ''
     output_format = 'mixed'
-    output_format = 'utf-8'
 
 
 def get_statusbar_text():

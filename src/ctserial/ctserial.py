@@ -179,7 +179,7 @@ def main():
 
 
 @main.command()
-@click.argument('device', type=click.Path(exists=True))
+@click.argument('device', type=str)
 @click.argument('baudrate', default=9600)
 def connect(device, baudrate):
     """Connect to a serial device to interact with it"""

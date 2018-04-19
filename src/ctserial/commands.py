@@ -16,6 +16,7 @@ import time
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from tabulate import tabulate
+from os.path import expanduser
 
 
 class Commands(object):
@@ -63,22 +64,25 @@ class Commands(object):
     def do_connect(self, input_text, output_text, event):
         """Generate a session with a single serial device to interact with it."""
         # def connect(device, baudrate):
-        event.app.session = serial.Serial(
-            port=device,
-            baudrate=baudrate,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS)
-        # initiate a serial session
-        event.app.session.isOpen()
-        return 'Connect session opened with {}'.format('test')
+        device = input_text.strip()
+        if device in [x.device for x in serial.tools.list_ports.comports()]:
+            event.app.session = serial.Serial(
+                port=device,
+                baudrate=baudrate,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                bytesize=serial.EIGHTBITS)
+            # initiate a serial session
+            event.app.session.isOpen()
+            return 'Connect session opened with {}'.format('test')
+        return False
 
 
     def do_close(self, input_text, output_text, event):
         """Close a session."""
         device = event.app.session.port
         event.app.session.close()
-        Return 'Session with {} closed.'.format(device)
+        return 'Session with {} closed.'.format(device)
 
 
     def do_help(self, input_text, output_text, event):
@@ -97,10 +101,10 @@ class Commands(object):
 
     def do_exit(self, input_text, output_text, event):
         """Exit the application."""
-        device = event.app.session.port
+        device = get_app().session.port
         event.app.session.close()
         event.app.exit()
-        Return 'Closing application and all sessions.'
+        return 'Closing application and all sessions.'
 
 
     def _send_instruction(self, session, tx_bytes):

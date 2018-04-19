@@ -18,8 +18,8 @@ Control Things Serial, aka ctserial.py
 import sys
 import serial
 import time
-from commands import Commands
-from prompt_toolkit.application import Application
+from .commands import Commands
+from prompt_toolkit.application import Application, DummyApplication
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
@@ -33,10 +33,10 @@ from prompt_toolkit.shortcuts.dialogs import message_dialog
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea, MenuContainer, MenuItem, ProgressBar
 from prompt_toolkit.contrib.completers import WordCompleter
-try:
-    import better_exceptions
-except ImportError as err:
-    pass
+
+
+class DummyApplication(DummyApplication):
+    session = ''
 
 
 class MyApplication(Application):
@@ -46,15 +46,15 @@ class MyApplication(Application):
 
 
 def get_statusbar_text():
-    sep = ' - '
-    device = 'connected:' + get_app().session.port
-    output_format = 'output:' + get_app().output_format
-    return sep.join([device, output_format])
-    # return 'text'
+    # sep = ' - '
+    # device = 'connected:' + get_app().session.port
+    # output_format = 'output:' + get_app().output_format
+    # return sep.join([device, output_format])
+    return 'text'
 
 
 # def start_app(session):
-def start_app():
+def start_app(args):
     """Text-based GUI application"""
     cmd = Commands()
     completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
@@ -99,7 +99,7 @@ def start_app():
                 MenuItem('Save'),
                 MenuItem('Save as...'),
                 MenuItem('-', disabled=True),
-                MenuItem('Exit', handler=cmd.do_exit),  ]),
+                MenuItem('Exit', handler=cmd.do_exit('','','')),  ]),
             MenuItem('View ', children=[
                 MenuItem('Split'),  ]),
             MenuItem('Info ', children=[
@@ -136,8 +136,7 @@ def start_app():
     @kb.add('c-q')
     def _(event):
         " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
-        session.close()
-        event.app.exit()
+        cmd.exit(input_field.text, output_field.text, event)
 
     @kb.add('c-d')
     def _(event):

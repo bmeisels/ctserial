@@ -118,6 +118,7 @@ def start_app(args):
         # Process commands on prompt after hitting enter key
         # tx_bytes = parse_command(input_field.text, event=event)
         output_text = cmd.execute(input_field.text, output_field.text, event)
+        input_field.buffer.reset(append_to_history=True)
 
         # For commands that do not send data to serial device
         if output_text == None:

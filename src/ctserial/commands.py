@@ -94,6 +94,7 @@ class Commands(object):
             device = event.app.session.port
             event.app.session.close()
             output_text += 'Session with {} closed.'.format(device) + '\n'
+            event.app.session = ''
         return output_text
 
 

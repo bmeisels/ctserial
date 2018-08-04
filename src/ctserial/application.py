@@ -113,12 +113,20 @@ def start_app(args):
     # The key bindings.
     kb = KeyBindings()
 
+    @kb.add('space')
+    def _(event):
+        input_text = input_field.text + ' '
+        input_field.buffer.document = Document(
+            text=input_text, cursor_position=len(input_text))
+        input_field.buffer.completer = WordCompleter([], ignore_case=True)
+
     @kb.add('enter', filter=has_focus(input_field))
     def _(event):
         # Process commands on prompt after hitting enter key
         # tx_bytes = parse_command(input_field.text, event=event)
         output_text = cmd.execute(input_field.text, output_field.text, event)
         input_field.buffer.reset(append_to_history=True)
+        input_field.buffer.completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
 
         # For commands that do not send data to serial device
         if output_text == None:

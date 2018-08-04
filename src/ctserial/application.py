@@ -14,7 +14,6 @@ Control Things Serial, aka ctserial.py
 # details at <http://www.gnu.org/licenses/>.
 """
 
-# import click
 import sys
 import serial
 import time
@@ -92,19 +91,20 @@ def start_app(args):
     # Adding menus
     root_container = MenuContainer(
         body=body,
-        menu_items=[
-            MenuItem('Project ', children=[
-                MenuItem('New'),
-                MenuItem('Open'),
-                MenuItem('Save'),
-                MenuItem('Save as...'),
-                MenuItem('-', disabled=True),
-                MenuItem('Exit'),  ]),
-            MenuItem('View ', children=[
-                MenuItem('Split'),  ]),
-            MenuItem('Info ', children=[
-                MenuItem('Help'),
-                MenuItem('About'),  ]),  ],
+        menu_items=[],
+        # menu_items=[
+        #     MenuItem('Project ', children=[
+        #         MenuItem('New'),
+        #         MenuItem('Open'),
+        #         MenuItem('Save'),
+        #         MenuItem('Save as...'),
+        #         MenuItem('-', disabled=True),
+        #         MenuItem('Exit'),  ]),
+        #     MenuItem('View ', children=[
+        #         MenuItem('Split'),  ]),
+        #     MenuItem('Info ', children=[
+        #         MenuItem('Help'),
+        #         MenuItem('About'),  ]),  ],
         floats=[
             Float(xcursor=True,
                   ycursor=True,
@@ -168,5 +168,4 @@ def start_app(args):
         style=style,
         mouse_support=True,
         full_screen=True  )
-    # application.session = session
     application.run()

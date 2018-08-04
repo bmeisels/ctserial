@@ -19,7 +19,8 @@ import sys
 import serial
 import time
 from .commands import Commands
-from prompt_toolkit.application import Application, DummyApplication
+from .base import TextArea
+from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
@@ -31,26 +32,24 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.shortcuts.dialogs import message_dialog
 from prompt_toolkit.styles import Style
-from prompt_toolkit.widgets import TextArea, MenuContainer, MenuItem, ProgressBar
+from prompt_toolkit.widgets import MenuContainer, MenuItem, ProgressBar #, TextArea
 from prompt_toolkit.contrib.completers import WordCompleter
-
-
-class DummyApplication(DummyApplication):
-    session = ''
 
 
 class MyApplication(Application):
     session = ''
     output_format = 'mixed'
-    output_format = 'utf-8'
 
 
 def get_statusbar_text():
-    # sep = ' - '
-    # device = 'connected:' + get_app().session.port
-    # output_format = 'output:' + get_app().output_format
-    # return sep.join([device, output_format])
-    return 'text'
+    sep = '  -  '
+    session = get_app().session
+    if type(session) == serial.Serial:
+        device = 'connected:' + session.port
+    else:
+        device = 'connected:None'
+    output_format = 'output:' + get_app().output_format
+    return sep.join([device, output_format])
 
 
 # def start_app(session):
@@ -65,7 +64,8 @@ def start_app(args):
         height=1,
         prompt='ctserial> ',
         style='class:input-field',
-        completer=completer)
+        completer=completer,
+        history=history)
 
     output_field = TextArea(
         scrollbar=True,
@@ -99,7 +99,7 @@ def start_app(args):
                 MenuItem('Save'),
                 MenuItem('Save as...'),
                 MenuItem('-', disabled=True),
-                MenuItem('Exit', handler=cmd.do_exit('','','')),  ]),
+                MenuItem('Exit'),  ]),
             MenuItem('View ', children=[
                 MenuItem('Split'),  ]),
             MenuItem('Info ', children=[
@@ -133,10 +133,20 @@ def start_app(args):
             input_field.text = ''
 
     @kb.add('c-c')
+    def _(event):
+        """Pressing Control-C will copy highlighted text to clipboard"""
+        data = output_field.buffer.copy_selection()
+        get_app().clipboard.set_data(data)
+
+    @kb.add('c-p')
+    def _(event):
+        """Pressing Control-P will paste text from clipboard"""
+        input_field.buffer.paste_clipboard_data(get_app().clipboard.get_data())
+
     @kb.add('c-q')
     def _(event):
-        " Pressing Ctrl-Q or Ctrl-C will exit the user interface. "
-        cmd.exit(input_field.text, output_field.text, event)
+        " Pressing Ctrl-Q will exit the user interface. "
+        cmd.do_exit(input_field.text, output_field.text, event)
 
     @kb.add('c-d')
     def _(event):
@@ -159,31 +169,3 @@ def start_app(args):
         full_screen=True  )
     # application.session = session
     application.run()
-
-
-# @click.group()
-# def main():
-#     pass
-#
-#
-# @main.command()
-# @click.argument('device', type=click.Path(exists=True))
-# @click.argument('baudrate', default=9600)
-# def connect(device, baudrate):
-#     """Connect to a serial device to interact with it"""
-#     print('entering connect')
-#     session = serial.Serial(
-#         port=device,
-#         baudrate=baudrate,
-#         parity=serial.PARITY_NONE,
-#         stopbits=serial.STOPBITS_ONE,
-#         bytesize=serial.EIGHTBITS)
-#     # initiate a serial session
-#     session.isOpen()
-#     # start full screen application
-#     start_app(session=session)
-
-
-if __name__ == '__main__':
-    # main()
-    start_app()

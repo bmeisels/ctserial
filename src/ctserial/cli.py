@@ -20,15 +20,15 @@ except ImportError as err:
 
 def main():
     """Start application but allow passing of commands that create sessions"""
-    cmd = Commands()
-    p = Argp(description='ctserial is a security professional\'s swiss army knife for interacting with raw serial devices')
-    subp = p.add_subparsers(dest='session')
-
-    # Connect
-    p_conn = subp.add_parser('connect', help=cmd.do_connect.__doc__)
-    p_conn.add_argument('device', type=str,
-                        help='open a /dev/... serial file or COM port')
-    p_conn.add_argument('baudrate', nargs='?', type=int, default=9600, help='baudrate ')
+    # cmd = Commands()
+    # p = Argp(description='ctserial is a security professional\'s swiss army knife for interacting with raw serial devices')
+    # subp = p.add_subparsers(dest='session')
+    #
+    # # Connect
+    # p_conn = subp.add_parser('connect', help=cmd.do_connect.__doc__)
+    # p_conn.add_argument('device', type=str,
+    #                     help='open a /dev/... serial file or COM port')
+    # p_conn.add_argument('baudrate', nargs='?', type=int, default=9600, help='baudrate ')
 
     # # Sniff
     # p_sniff = subp.add_parser('sniff', help='')
@@ -38,8 +38,9 @@ def main():
     # p_proxy = subp.add_parser('proxy', help=cmd.do_proxy.__doc__)
     # p_proxy.add_argument('', help='')
 
-    args = p.parse_args()
-    start_app(args)
+    # args = p.parse_args()
+    # start_app(args)
+    start_app([])
 
 
 if __name__ == '__main__':

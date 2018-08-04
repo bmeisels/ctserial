@@ -115,9 +115,12 @@ def start_app(args):
 
     @kb.add('space')
     def _(event):
-        input_text = input_field.text + ' '
+        input_text = input_field.text
+        cursor=len(input_text)
+        input_updated = input_text[:cursor] + ' ' + input_text[cursor+1:]
+        cursor += 1
         input_field.buffer.document = Document(
-            text=input_text, cursor_position=len(input_text))
+            text=input_updated, cursor_position=cursor)
         input_field.buffer.completer = WordCompleter([], ignore_case=True)
 
     @kb.add('enter', filter=has_focus(input_field))

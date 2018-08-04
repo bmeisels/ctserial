@@ -1,5 +1,6 @@
 # Control Things Serial
 
+ctserial goal is to become the security professional's Swiss army knife for interacting with raw serial devices
 
 # Installation:
 

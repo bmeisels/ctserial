@@ -90,7 +90,10 @@ class Commands(object):
 
     def do_close(self, input_text, output_text, event):
         """Close a session."""
-        if type(event.app.session) == serial.Serial:
+        if type(event.app.session) != serial.Serial:
+            output_text += 'Connect to a device first\n'
+            return output_text
+        else:
             device = event.app.session.port
             event.app.session.close()
             output_text += 'Session with {} closed.'.format(device) + '\n'

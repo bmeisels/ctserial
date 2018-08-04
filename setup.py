@@ -22,7 +22,7 @@ def read(*names, **kwargs):
 
 setup(
     name='ctserial',
-    version='0.1',
+    version='0.2',
     license='GPLv3',
     description='ctserial is a security professional\'s swiss army knife for interacting with raw serial devices',
     long_description=open('README.md').read(),
@@ -57,8 +57,7 @@ setup(
         'serial', 'pentest', 'ControlThingsTools', 'ControlThingsPlatform',
     ],
     install_requires=[
-        'click',
-        'prompt_toolkit>=2.0.0',
+        'prompt_toolkit>=2.0.1',
         'pyserial',
         'tabulate'
     ],
@@ -69,7 +68,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'ctserial = ctserial.ctserial:main',
+            'ctserial = ctserial.cli:main',
         ]
     },
 )

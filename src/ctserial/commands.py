@@ -12,10 +12,12 @@
 import shlex
 import re
 import serial
+import serial.tools.list_ports
 import time
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from tabulate import tabulate
+from os.path import expanduser
 
 
 class Commands(object):
@@ -34,7 +36,7 @@ class Commands(object):
         if len(parts) == 2:
             arg = parts[1]
         else:
-            arg = None
+            arg = ''
         try:
             func = getattr(self, 'do_' + command)
         except AttributeError:
@@ -45,6 +47,7 @@ class Commands(object):
     def commands(self):
         commands = [a[3:] for a in dir(self.__class__) if a.startswith('do_')]
         return commands
+
 
     def meta_dict(self):
         meta_dict = {}
@@ -59,8 +62,48 @@ class Commands(object):
         return ''
 
 
+    def do_connect(self, input_text, output_text, event):
+        """Generate a session with a single serial device to interact with it."""
+        parts = input_text.split()
+        devices = [x.device for x in serial.tools.list_ports.comports()]
+        if len(parts) > 0:
+            device = parts[0]
+            if len(parts) > 1:
+                baudrate = parts[1]
+            else:
+                baudrate = 9600
+            if device in devices:
+                event.app.session = serial.Serial(
+                    port=device,
+                    baudrate=baudrate,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                    bytesize=serial.EIGHTBITS)
+                # initiate a serial session and return success message
+                event.app.session.isOpen()
+                output_text += 'Connect session opened with {}\n'.format(device)
+                return output_text
+        # return list of devices if command incomplete or incorrect
+        output_text += 'Valid devices: ' + ', '.join(devices) + '\n'
+        return output_text
+
+
+    def do_close(self, input_text, output_text, event):
+        """Close a session."""
+        if type(event.app.session) != serial.Serial:
+            output_text += 'Connect to a device first\n'
+            return output_text
+        else:
+            device = event.app.session.port
+            event.app.session.close()
+            output_text += 'Session with {} closed.'.format(device) + '\n'
+            event.app.session = ''
+        return output_text
+
+
     def do_help(self, input_text, output_text, event):
         """Print application help."""
+        output_text += '==================== Help ====================\n'
         output_text += 'Welcome to Control Things Serial, or ctserial\n\n'
         output_text += 'This application allows you to interact directly with '
         output_text += 'serial devices.  You can do this by typing commands at '
@@ -69,26 +112,37 @@ class Commands(object):
         table = []
         for key, value in self.meta_dict().items():
             table.append([key, value])
-        output_text += tabulate(table, tablefmt="plain")
+        output_text += tabulate(table, tablefmt="plain") + '\n'
+        output_text += '==============================================\n'
+        return output_text
+
+
+    def do_history(self, input_text, output_text, event):
+        """Print current history."""
+        output_text += ''.join(event.app.history)
         return output_text
 
 
     def do_exit(self, input_text, output_text, event):
         """Exit the application."""
+        if type(event.app.session) == serial.Serial:
+            event.app.session.close()
         event.app.exit()
+        output_text += 'Closing application and all sessions.\n'
+        return output_text
 
 
-    def _send_instruction(self, connection, tx_bytes):
+    def _send_instruction(self, session, tx_bytes):
         """Send data to serial device"""
         # clear out any leftover data
         try:
-            if connection.inWaiting() > 0:
-                connection.flushInput()
-            connection.write(tx_bytes)
+            if session.inWaiting() > 0:
+                session.flushInput()
+            session.write(tx_bytes)
             time.sleep(0.1)
             rx_raw = bytes()
-            while connection.inWaiting() > 0:
-                rx_raw += connection.read()
+            while session.inWaiting() > 0:
+                rx_raw += session.read()
         except BaseException as e:
             output = '\n\n{}'.format(e)
         time.sleep(0.1)
@@ -117,13 +171,16 @@ class Commands(object):
 
     def do_sendhex(self, input_text, output_text, event):
         """Send raw hex to serial device."""
+        if type(event.app.session) != serial.Serial:
+            output_text += 'Connect to a device first\n'
+            return output_text
         data = input_text.lower()
         if re.match('^[0123456789abcdef\\\\x ]+$', data):
             raw_hex = re.sub('[\\\\x ]', '', data)
             if len(raw_hex) % 2 == 0:
                 tx_bytes = bytes.fromhex(raw_hex)
-                connection = event.app.connection
-                rx_bytes = self._send_instruction(connection, tx_bytes)
+                session = event.app.session
+                rx_bytes = self._send_instruction(session, tx_bytes)
                 output_text += self._format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
                 output_text += self._format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
                 return output_text
@@ -132,11 +189,16 @@ class Commands(object):
 
     def do_send(self, input_text, output_text, event):
         """Send string to serial device."""
-        # remove spaces not in quotes and format
-        string = ''.join(shlex.split(input_text))
-        tx_bytes = bytes(string, encoding='utf-8')
-        connection = event.app.connection
-        rx_bytes = self._send_instruction(connection, tx_bytes)
-        output_text += self._format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
-        output_text += self._format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
-        return output_text
+        if type(event.app.session) != serial.Serial:
+            output_text += 'Connect to a device first\n'
+            return output_text
+        if len(input_text) > 0:
+            # remove spaces not in quotes and format
+            string = ''.join(shlex.split(input_text))
+            tx_bytes = bytes(string, encoding='utf-8')
+            session = event.app.session
+            rx_bytes = self._send_instruction(session, tx_bytes)
+            output_text += self._format_output(tx_bytes, event.app.output_format, prefix='--> ') + '\n'
+            output_text += self._format_output(rx_bytes, event.app.output_format, prefix='<-- ') + '\n'
+            return output_text
+        return False

@@ -124,9 +124,11 @@ def start_app(args):
     def _(event):
         # Process commands on prompt after hitting enter key
         # tx_bytes = parse_command(input_field.text, event=event)
+        input_field.buffer.completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
+        if len(input_field.text) == 0:
+            return
         output_text = cmd.execute(input_field.text, output_field.text, event)
         input_field.buffer.reset(append_to_history=True)
-        input_field.buffer.completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
 
         # For commands that do not send data to serial device
         if output_text == None:

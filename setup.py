@@ -57,7 +57,7 @@ setup(
         'serial', 'pentest', 'ControlThingsTools', 'ControlThingsPlatform',
     ],
     install_requires=[
-        'prompt_toolkit>=2.0.0',
+        'prompt_toolkit>=2.0.1',
         'pyserial',
         'tabulate'
     ],

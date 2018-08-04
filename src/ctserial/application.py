@@ -26,14 +26,14 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout.containers import HSplit, VSplit, Window, FloatContainer, Float, Align
+from prompt_toolkit.layout.containers import HSplit, VSplit, Window, FloatContainer, Float
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.shortcuts.dialogs import message_dialog
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import MenuContainer, MenuItem, ProgressBar #, TextArea
-from prompt_toolkit.contrib.completers import WordCompleter
+from prompt_toolkit.completion import WordCompleter
 
 
 class MyApplication(Application):

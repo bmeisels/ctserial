@@ -8,7 +8,7 @@ from prompt_toolkit.filters import to_filter
 from prompt_toolkit.formatted_text import to_formatted_text, Template, is_formatted_text
 from prompt_toolkit.formatted_text.utils import fragment_list_to_text
 from prompt_toolkit.key_binding.key_bindings import KeyBindings
-from prompt_toolkit.layout.containers import Window, VSplit, HSplit, FloatContainer, Float, Align, is_container
+from prompt_toolkit.layout.containers import Window, VSplit, HSplit, FloatContainer, Float, is_container
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension as D
 from prompt_toolkit.layout.dimension import is_dimension, to_dimension

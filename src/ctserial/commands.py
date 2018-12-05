@@ -28,6 +28,7 @@ class Commands(object):
     #     - return a string to print, None, or False
     # Returning a False does nothing, forcing users to correct mistakes
 
+    macro_hex = {}
 
     def execute(self, input_text, output_text, event):
         """Extract command and call appropriate function."""
@@ -174,7 +175,7 @@ class Commands(object):
         if type(event.app.session) != serial.Serial:
             output_text += 'Connect to a device first\n'
             return output_text
-        data = input_text.lower()
+        data = input_text.lower().replace("0x", "")
         if re.match('^[0123456789abcdef\\\\x ]+$', data):
             raw_hex = re.sub('[\\\\x ]', '', data)
             if len(raw_hex) % 2 == 0:
@@ -186,6 +187,19 @@ class Commands(object):
                 return output_text
         return False
 
+    def do_setmacro(self, input_text, output_text, evnt):
+        v1 = input_text[: input_text.find(' ')]
+        v2 = input_text[input_text.find(' '): ]
+        self.macro_hex[v1] = v2
+        output_text += "key " + v1 + " set to value " + v2 + "\n"
+        return output_text
+
+    def do_sendmacro(self, input_text, output_text, event):
+        macro = self.macro_hex[input_text]
+        if macro:
+            return self.do_sendhex(macro, output_text, event)
+        output_text += 'Unknown macro\n'
+        return output_text
 
     def do_send(self, input_text, output_text, event):
         """Send string to serial device."""

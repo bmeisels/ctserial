@@ -137,11 +137,11 @@ class Commands(object):
         """Send data to serial device"""
         # clear out any leftover data
         try:
+            rx_raw = bytes()
             if session.inWaiting() > 0:
                 session.flushInput()
             session.write(tx_bytes)
             time.sleep(0.1)
-            rx_raw = bytes()
             while session.inWaiting() > 0:
                 rx_raw += session.read()
         except BaseException as e:

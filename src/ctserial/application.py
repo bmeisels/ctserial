@@ -19,11 +19,12 @@ import serial
 import time
 from .commands import Commands
 from .base import TextArea
+from pathlib import Path
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import has_focus
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout.containers import HSplit, VSplit, Window, FloatContainer, Float
 from prompt_toolkit.layout.controls import FormattedTextControl
@@ -56,7 +57,7 @@ def start_app(args):
     """Text-based GUI application"""
     cmd = Commands()
     completer = WordCompleter(cmd.commands(), meta_dict=cmd.meta_dict(), ignore_case=True)
-    history = InMemoryHistory()
+    history = FileHistory("{}/.ctserial_history".format(Path.home()))
 
     # Individual windows
     input_field = TextArea(
